@@ -1,0 +1,4 @@
+Name: Rex::Disk::Layout
+Description: Disk layout module
+Author: Jiri Spacek <spaceji3@fit.cvut.cz>
+License: MIT
