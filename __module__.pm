@@ -38,6 +38,16 @@ task "mount_filesystems" => sub {
   }
 };
 
+task "swapon" => sub {
+  my $fs_layout = param_lookup "filesystem_layout", ();
+  foreach (@$fs_layout) {
+    my $partition = $_;
+    if ( $partition->{fstype} eq 'swap' ) {
+      run "swapon " . "/dev/disk/by-partlabel/" . $partition->{partlabel}
+    }
+  }
+};
+
 
 ##### private utility subroutines follow... ####
 
@@ -151,18 +161,12 @@ sub _mount {
   my $options = [];
   push @$options, "subvol=" . $mount_spec->{subvol_name} if defined($mount_spec->{subvol_name});
   my $mountpoint = defined($prefix) ? File::Spec->catdir( $prefix, $mount_dir ) : $mount_dir;
-  $DB::single = 1;
+
   if (@$options) {
     mount $device, $mountpoint, options => $options;
   } else {
     mount $device, $mountpoint;
   }
-}
-
-sub _swapon {
-  my ( $mount_spec, $prefix ) = @_;
-
-
 }
 
 # returns
@@ -215,7 +219,6 @@ sub _parse_path {
   push @$result, File::Spec->splitdir($canon_path);
   return $result;
 }
-
 
 
 
