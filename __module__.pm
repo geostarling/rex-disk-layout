@@ -11,7 +11,7 @@ use Data::Dumper;
 use File::Spec;
 
 task "setup_partitions" => sub {
-  my $part_layout = param_lookup "partition_layout", ();
+  my $part_layout = param_lookup "partition_layout", [];
   map {
     clearpart $_,
     initialize => "gpt"
@@ -20,14 +20,14 @@ task "setup_partitions" => sub {
 };
 
 task "setup_filesystems" => sub {
-  my $fs_layout = param_lookup "filesystem_layout", ();
+  my $fs_layout = param_lookup "filesystem_layout", [];
   map  { _create_fs($_) } @{$fs_layout};
 };
 
 task "mount_filesystems" => sub {
   my $parameters = shift;
   my $mount_root = $parameters->{mount_root};
-  my $fs_layout = param_lookup "filesystem_layout", ();
+  my $fs_layout = param_lookup "filesystem_layout", [];
 
   my $mount_specs = _extract_mount_specs($fs_layout);
 
@@ -40,12 +40,24 @@ task "mount_filesystems" => sub {
 
 task "swapon" => sub {
   my $fs_layout = param_lookup "filesystem_layout", ();
-  foreach (@$fs_layout) {
+  my $swap_specs = _extract_swap_specs($fs_layout);
+  foreach (@$swap_specs) {
     my $partition = $_;
-    if ( $partition->{fstype} eq 'swap' ) {
-      run "swapon " . "/dev/disk/by-partlabel/" . $partition->{partlabel}
-    }
+    run "swapon " . "/dev/disk/by-partlabel/" . $partition->{partlabel};
   }
+};
+
+task "setup_fstab" => sub {
+  my $parameters = shift;
+  my $automount = $parameters->{automount} || FALSE;
+  my $fs_layout = param_lookup "filesystem_layout", ();
+  my $mount_specs = _extract_mount_specs($fs_layout) ;
+  my $swap_specs = _extract_swap_specs($fs_layout) ;
+  push @$mount_specs, @$swap_specs;
+  file "/etc/fstab",
+    source => template("templates/fstab.tpl", mount_specs => $mount_specs),
+    ensure => "present",
+    on_change => sub { run 'mount -a' if $automount; };
 };
 
 
@@ -84,12 +96,12 @@ sub _get_device_path {
 
 sub _create_partition {
   my ( $partition_opt ) = @_;
-
   partition "none",
-  ondisk    => _get_device_path($partition_opt),
-  size      => $partition_opt->{size} != "100%" ? $partition_opt->{size} : undef,
-  grow      => $partition_opt->{size} != "100%" ? undef                : TRUE,
-  partlabel => $partition_opt->{partlabel};
+    ondisk    => _get_device_path($partition_opt),
+    size      => $partition_opt->{size} != "100%" ? $partition_opt->{size} : undef,
+    grow      => $partition_opt->{size} != "100%" ? undef : TRUE,
+    boot      => $partition_opt->{bootable} ? TRUE : undef,
+    partlabel => $partition_opt->{partlabel};
 }
 
 sub _create_fs {
@@ -158,8 +170,8 @@ sub _mount {
   my $device = "/dev/disk/by-partlabel/" . $mount_spec->{partlabel};
 
   my $mount_dir = $mount_spec->{mountpoint};
-  my $options = [];
-  push @$options, "subvol=" . $mount_spec->{subvol_name} if defined($mount_spec->{subvol_name});
+  my $options = $mount_spec->{mount_options} || [];
+
   my $mountpoint = defined($prefix) ? File::Spec->catdir( $prefix, $mount_dir ) : $mount_dir;
 
   if (@$options) {
@@ -177,7 +189,6 @@ sub _mount {
 
 sub _compare_paths {
   my ($path1, $path2) = @_;
-  #$DB::single = 1;
   my $dirs1 = _parse_path($path1);
   my $dirs2 = _parse_path($path2);
 
