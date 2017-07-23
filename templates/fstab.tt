@@ -14,15 +14,10 @@
 
 # <fs>			<mountpoint>	<type>		<opts>		<dump/pass>
 
-
-<% for my $spec (@$mount_specs) { %>
-
-  <% if ($spec->{fstype}) == 'swap' { %>
-PARTLABEL=<%= $spec->{partlabel} %> none swap sw 0 0
-  <% } else {
-PARTLABEL=<%= $spec->{partlabel} %> <%= $spec->{mountpoint} %> <%= $spec->{fstype} %> <% join(",", @{$spec->{mount_options}}) %> 0 0
-  <% } %>
-
-
-
-<% } %>
+[% FOREACH spec IN mount_specs -%]
+  [% IF spec.fstype == 'swap' -%]
+PARTLABEL=[% spec.partlabel %] none swap sw 0 0
+  [% ELSE -%]
+PARTLABEL=[% spec.partlabel %] [% spec.mountpoint %] [% spec.fstype %] [% spec.mount_options.join(',') %] 0 0
+  [% END -%]
+[% END -%]

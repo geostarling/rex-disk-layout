@@ -6,9 +6,12 @@ use Rex::Commands::Partition;
 use Rex::Commands::Mkfs;
 use Rex::Commands::Fs;
 use Rex::CMDB;
+use Rex::Template::TT;
+
 use Data::Dumper;
 
 use File::Spec;
+use List::Util qw(any);
 
 task "setup_partitions" => sub {
   my $part_layout = param_lookup "partition_layout", [];
@@ -43,7 +46,8 @@ task "swapon" => sub {
   my $swap_specs = _extract_swap_specs($fs_layout);
   foreach (@$swap_specs) {
     my $partition = $_;
-    run "swapon " . "/dev/disk/by-partlabel/" . $partition->{partlabel};
+    my $device = run "readlink -f /dev/disk/by-partlabel/" . $partition->{partlabel};
+    run "swapon --show=name | tail -1 | grep $device || swapon $device"
   }
 };
 
@@ -52,10 +56,11 @@ task "setup_fstab" => sub {
   my $automount = $parameters->{automount} || FALSE;
   my $fs_layout = param_lookup "filesystem_layout", ();
   my $mount_specs = _extract_mount_specs($fs_layout) ;
-  my $swap_specs = _extract_swap_specs($fs_layout) ;
+  my $swap_specs = _extract_swap_specs($fs_layout);
+  $DB::single = 1;
   push @$mount_specs, @$swap_specs;
   file "/etc/fstab",
-    source => template("templates/fstab.tpl", mount_specs => $mount_specs),
+    content => template("templates/fstab.tt", mount_specs => $mount_specs),
     ensure => "present",
     on_change => sub { run 'mount -a' if $automount; };
 };
@@ -136,22 +141,41 @@ sub _create_fs {
 sub _extract_mount_specs {
   my ( $layout_def ) = @_;
   my $mount_specs = [];
+
   foreach (@$layout_def) {
     my $partition = $_;
     if ( defined($partition->{subvolumes}) ) {
       foreach (@{$partition->{subvolumes}}) {
         my $subvolume = $_;
-        push @$mount_specs, { partlabel   => $partition->{partlabel},
-                              subvol_name => $subvolume->{name},
-                              mountpoint => $subvolume->{mountpoint},
-                              fstype      => $partition->{fstype} }
+        my $options = $subvolume->{mount_options} || [];
+        my $subvol_opt = "subvol=" . $subvolume->{name};
+        push @$options, $subvol_opt unless any { $_ eq $subvol_opt } @$options;
+        push @$mount_specs, { partlabel     => $partition->{partlabel},
+                              subvol_name   => $subvolume->{name},
+                              mountpoint    => $subvolume->{mountpoint},
+                              fstype        => $partition->{fstype},
+                              mount_options => $options
+        }
         if defined($subvolume->{mountpoint});
       }
     } else {
+      $partition->{mount_options} = [] unless exists $partition->{mount_options};
       push @$mount_specs, $partition if defined($partition->{mountpoint});
     }
   }
   return $mount_specs;
+}
+
+sub _extract_swap_specs {
+  my ( $layout_def ) = @_;
+  my $swap_specs = [];
+  foreach (@$layout_def) {
+    my $partition = $_;
+    if ( $partition->{fstype} eq "swap" ) {
+      push @$swap_specs, $partition;
+    }
+  }
+  return $swap_specs;
 }
 
 sub _create_mountpoint {
@@ -170,7 +194,7 @@ sub _mount {
   my $device = "/dev/disk/by-partlabel/" . $mount_spec->{partlabel};
 
   my $mount_dir = $mount_spec->{mountpoint};
-  my $options = $mount_spec->{mount_options} || [];
+  my $options = $mount_spec->{mount_options};
 
   my $mountpoint = defined($prefix) ? File::Spec->catdir( $prefix, $mount_dir ) : $mount_dir;
 
