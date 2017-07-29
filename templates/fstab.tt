@@ -14,10 +14,10 @@
 
 # <fs>			<mountpoint>	<type>		<opts>		<dump/pass>
 
-[% FOREACH spec IN mount_specs -%]
-  [% IF spec.fstype == 'swap' -%]
+[% FOREACH spec IN mount_specs %]
+[%-  IF spec.fstype == 'swap' -%]
 PARTLABEL=[% spec.partlabel %] none swap sw 0 0
-  [% ELSE -%]
+[%-  ELSE -%]
 PARTLABEL=[% spec.partlabel %] [% spec.mountpoint %] [% spec.fstype %] [% spec.mount_options.join(',') %] 0 0
-  [% END -%]
-[% END -%]
+[%-  END %]
+[% END %]

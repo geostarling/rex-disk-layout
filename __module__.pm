@@ -57,7 +57,7 @@ task "setup_fstab" => sub {
   my $fs_layout = param_lookup "filesystem_layout", ();
   my $mount_specs = _extract_mount_specs($fs_layout) ;
   my $swap_specs = _extract_swap_specs($fs_layout);
-  $DB::single = 1;
+
   push @$mount_specs, @$swap_specs;
   file "/etc/fstab",
     content => template("templates/fstab.tt", mount_specs => $mount_specs),
@@ -102,11 +102,11 @@ sub _get_device_path {
 sub _create_partition {
   my ( $partition_opt ) = @_;
   partition "none",
-    ondisk    => _get_device_path($partition_opt),
-    size      => $partition_opt->{size} != "100%" ? $partition_opt->{size} : undef,
-    grow      => $partition_opt->{size} != "100%" ? undef : TRUE,
-    boot      => $partition_opt->{bootable} ? TRUE : undef,
-    partlabel => $partition_opt->{partlabel};
+    ondisk       => _get_device_path($partition_opt),
+    size         => $partition_opt->{size} != "100%" ? $partition_opt->{size} : undef,
+    grow         => $partition_opt->{size} != "100%" ? undef : TRUE,
+    legacy_boot  => $partition_opt->{bootable} ? TRUE : undef,
+    partlabel    => $partition_opt->{partlabel};
 }
 
 sub _create_fs {
