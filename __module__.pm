@@ -24,7 +24,8 @@ task "setup_partitions" => sub {
 
 task "setup_filesystems" => sub {
   my $fs_layout = param_lookup "filesystem_layout", [];
-  map  { _create_fs($_) } @{$fs_layout};
+  my @filtered_fs_layout = grep { $_->{allow_mkfs} } @{$fs_layout};
+  map { _create_fs($_) } @filtered_fs_layout;
 };
 
 task "mount_filesystems" => sub {
@@ -147,7 +148,7 @@ sub _extract_mount_specs {
     if ( defined($partition->{subvolumes}) ) {
       foreach (@{$partition->{subvolumes}}) {
         my $subvolume = $_;
-        my $options = $subvolume->{mount_options} || [];
+        my $options = $subvolume->{mount_options} || ["defaults"];
         my $subvol_opt = "subvol=" . $subvolume->{name};
         push @$options, $subvol_opt unless any { $_ eq $subvol_opt } @$options;
         push @$mount_specs, { partlabel     => $partition->{partlabel},
@@ -159,7 +160,7 @@ sub _extract_mount_specs {
         if defined($subvolume->{mountpoint});
       }
     } else {
-      $partition->{mount_options} = [] unless exists $partition->{mount_options};
+      $partition->{mount_options} = [ "defaults" ] unless exists $partition->{mount_options};
       push @$mount_specs, $partition if defined($partition->{mountpoint});
     }
   }
