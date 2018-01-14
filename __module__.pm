@@ -58,7 +58,6 @@ task "setup_fstab" => sub {
   my $fs_layout = param_lookup "filesystem_layout", ();
   my $mount_specs = _extract_mount_specs($fs_layout) ;
   my $swap_specs = _extract_swap_specs($fs_layout);
-
   push @$mount_specs, @$swap_specs;
   file "/etc/fstab",
     content => template("templates/fstab.tt", mount_specs => $mount_specs),
@@ -67,7 +66,7 @@ task "setup_fstab" => sub {
 };
 
 
-##### private utility subroutines follow... ####
+##### private utility subroutines follow... #####
 
 sub _get_affected_devices {
   my @part_layout = @_;
@@ -160,7 +159,7 @@ sub _extract_mount_specs {
         if defined($subvolume->{mountpoint});
       }
     } else {
-      $partition->{mount_options} = [ "defaults" ] unless exists $partition->{mount_options};
+      $partition->{mount_options} = $partition->{mount_options} || [ "defaults" ];
       push @$mount_specs, $partition if defined($partition->{mountpoint});
     }
   }
